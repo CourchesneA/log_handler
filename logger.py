@@ -44,7 +44,9 @@ class Logger:
 
     def on_episode_done(self):
         print(f"episode {self.episode_count} done, writing to file")
-        self._multithreaded_recording.submit(lambda: self._commit(self.episode))
+        # The next file cause all episodes to be written to the same pickle FP. (Overwrite first?)
+        # self._multithreaded_recording.submit(lambda: self._commit(self.episode))
+        self._commit(self.episode)
         self.episode = Episode(version=SCHEMA_VERSION)
         self.episode_count += 1
 

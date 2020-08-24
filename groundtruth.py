@@ -36,7 +36,6 @@ pwm_converter = SteeringToWheelVelWrapper()
 
 
 class DataGenerator:
-
     def __init__(self, env, max_episodes):
         self.env = env
         self.env.reset()
@@ -46,23 +45,18 @@ class DataGenerator:
         #! Enter main event loop
         print("Starting data generation")
 
-        #TODO visualize using new schema
-        #TODO (after testing with pyglet) move that to
-        #threading.Timer(1.0 / self.env.unwrapped.frame_rate, lambda: self.update(env)).start()
+        # TODO visualize using new schema
+        # TODO (after testing with pyglet) move that to
+        # threading.Timer(1.0 / self.env.unwrapped.frame_rate, lambda: self.update(env)).start()
         pyglet.clock.schedule_interval(
-            self.update,
-            1.0 / self.env.unwrapped.frame_rate,
-            self.env
+            self.update, 1.0 / self.env.unwrapped.frame_rate, self.env
         )
-
 
         pyglet.app.run()
 
         print("App exited, closing file descriptors")
         self.logger.close()
         self.env.close()
-
-
 
     def image_resize(self, image, width=None, height=None, inter=cv2.INTER_AREA):
         # initialize the dimensions of the image to be resized and
@@ -95,7 +89,6 @@ class DataGenerator:
         # return the resized image
         return resized
 
-
     def pure_pursuite(self, env) -> List[float]:
         """
         Implement pure-pursuit & PID using ground truth
@@ -103,7 +96,9 @@ class DataGenerator:
         """
 
         # Find the curve point closest to the agent, and the tangent at that point
-        closest_point, closest_tangent = env.closest_curve_point(env.cur_pos, env.cur_angle)
+        closest_point, closest_tangent = env.closest_curve_point(
+            env.cur_pos, env.cur_angle
+        )
 
         iterations = 0
 
@@ -135,7 +130,6 @@ class DataGenerator:
         steering = gain * -dot
 
         return [velocity, steering]
-
 
     def update(self, dt, env):
         """
@@ -198,12 +192,11 @@ if __name__ == "__main__":
         "--raw-log", default=False, help="enables recording high resolution raw log"
     )
     parser.add_argument(
-        "--steps", default=150, help="number of steps to record in one batch"
+        "--steps", default=300, help="number of steps to record in one batch"
     )
-    parser.add_argument("--nb-episodes", default=1, type=int)
+    parser.add_argument("--nb-episodes", default=5, type=int)
 
     args = parser.parse_args()
-
 
     #! Start Env
     if args.env_name is None:
