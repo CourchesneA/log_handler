@@ -39,7 +39,7 @@ class DataGenerator:
     def __init__(self, env, max_episodes):
         self.env = env
         self.env.reset()
-        self.logger = Logger(self.env, log_file="training_data.log")
+        self.logger = Logger(self.env, log_file="training_test.log")
         self.max_episodes = max_episodes
 
         #! Enter main event loop
@@ -156,6 +156,7 @@ class DataGenerator:
 
             # NOTICE: OpenCV changes the order of the channels !!!
             cropped_final = cv2.cvtColor(cropped, cv2.COLOR_BGR2YUV)
+            print(obs.shape)
 
             step = Step(obs, reward, action, done)
             self.logger.log(step, info)
@@ -192,9 +193,9 @@ if __name__ == "__main__":
         "--raw-log", default=False, help="enables recording high resolution raw log"
     )
     parser.add_argument(
-        "--steps", default=300, help="number of steps to record in one batch"
+        "--steps", default=1, help="number of steps to record in one batch", type=int
     )
-    parser.add_argument("--nb-episodes", default=5, type=int)
+    parser.add_argument("--nb-episodes", default=1, type=int)
 
     args = parser.parse_args()
 
