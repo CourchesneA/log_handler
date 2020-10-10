@@ -36,10 +36,11 @@ pwm_converter = SteeringToWheelVelWrapper()
 
 
 class DataGenerator:
-    def __init__(self, env, max_episodes):
+    def __init__(self, env, max_episodes, max_steps):
         self.env = env
         self.env.reset()
-        self.logger = Logger(self.env, log_file="training_test.log")
+        self.logger = Logger(self.env, log_file=f"ds_{max_steps}_{max_episodes}.log")
+        self.episode = 1
         self.max_episodes = max_episodes
 
         #! Enter main event loop
@@ -165,6 +166,8 @@ class DataGenerator:
 
         if done:
             self.logger.on_episode_done()
+            print(f"episode {self.episode}/{self.max_episodes}")
+            self.episode += 1
             env.reset()
             if self.logger.episode_count >= args.nb_episodes:
                 print("Training completed !")
@@ -193,9 +196,9 @@ if __name__ == "__main__":
         "--raw-log", default=False, help="enables recording high resolution raw log"
     )
     parser.add_argument(
-        "--steps", default=1, help="number of steps to record in one batch", type=int
+        "--steps", default=500, help="number of steps to record in one batch"
     )
-    parser.add_argument("--nb-episodes", default=1, type=int)
+    parser.add_argument("--nb-episodes", default=100, type=int)
 
     args = parser.parse_args()
 
@@ -214,4 +217,4 @@ if __name__ == "__main__":
     else:
         env = gym.make(env=args.env_name)
 
-    node = DataGenerator(env, max_episodes=args.nb_episodes)
+    node = DataGenerator(env, max_episodes=args.nb_episodes, max_steps=args.steps)
