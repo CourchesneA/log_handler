@@ -12,7 +12,7 @@ EPISODE_LABEL = "Episode: {}/{}"
 FRAME_LABEL = "Frame: {}/{}"
 FPS_LABEL = "Speed: {} fps"
 
-FILE_NAME = "training_data.log"
+FILE_NAME = "slimtest.log"
 # FILE_NAME = "train-002.log"
 # FILE_NAME = "log2.log"
 

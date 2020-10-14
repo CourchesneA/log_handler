@@ -36,12 +36,15 @@ pwm_converter = SteeringToWheelVelWrapper()
 
 
 class DataGenerator:
-    def __init__(self, env, max_episodes, max_steps):
+    def __init__(self, env, max_episodes, max_steps, log_file=None, downscale=False):
+        if not log_file:
+            log_file = f"/miniscratch/courchea/ds_{max_steps}_{max_episodes}.log"
         self.env = env
         self.env.reset()
-        self.logger = Logger(self.env, log_file=f"/miniscratch/courchea/ds_{max_steps}_{max_episodes}.log")
+        self.logger = Logger(self.env, log_file=log_file)
         self.episode = 1
         self.max_episodes = max_episodes
+        self.downscale = downscale
 
         #! Enter main event loop
         print("Starting data generation")
@@ -147,22 +150,26 @@ class DataGenerator:
         if reward == REWARD_INVALID_POSE:
             print("Out of bound")
         else:
-            #! resize to Nvidia standard:
-            obs_distorted_DS = self.image_resize(obs, width=200)
+            output_img = obs
+            if self.downscale:
+                # Resize to (150x200)
+                #! resize to Nvidia standard:
+                obs_distorted_DS = self.image_resize(obs, width=200)
 
-            #! ADD IMAGE-PREPROCESSING HERE!!!!!
-            height, width = obs_distorted_DS.shape[:2]
-            # print('Distorted return image Height: ', height,' Width: ',width)
-            cropped = obs_distorted_DS[0:150, 0:200]
+                #! ADD IMAGE-PREPROCESSING HERE!!!!!
+                height, width = obs_distorted_DS.shape[:2]
+                # print('Distorted return image Height: ', height,' Width: ',width)
+                cropped = obs_distorted_DS[0:150, 0:200]
 
-            # NOTICE: OpenCV changes the order of the channels !!!
-            cropped_final = cv2.cvtColor(cropped, cv2.COLOR_BGR2YUV)
-            print(obs.shape)
+                # NOTICE: OpenCV changes the order of the channels !!!
+                output_img = cv2.cvtColor(cropped, cv2.COLOR_BGR2YUV)
+                # print(f"Recorded shape: {obs.shape}")
+                # print(f"Saved image shape: {cropped.shape}")
 
-            step = Step(obs, reward, action, done)
+            step = Step(output_img, reward, action, done)
             self.logger.log(step, info)
             # rawlog.log(obs, action, reward, done, info)
-            last_reward = reward
+            # last_reward = reward
 
         if done:
             self.logger.on_episode_done()
@@ -196,9 +203,11 @@ if __name__ == "__main__":
         "--raw-log", default=False, help="enables recording high resolution raw log"
     )
     parser.add_argument(
-        "--steps", default=1000, help="number of steps to record in one batch"
+        "--steps", default=1000, help="number of steps to record in one batch", type=int
     )
     parser.add_argument("--nb-episodes", default=1200, type=int)
+    parser.add_argument("--logfile", type=str, default=None)
+    parser.add_argument("--downscale", action="store_true")
 
     args = parser.parse_args()
 
@@ -217,4 +226,4 @@ if __name__ == "__main__":
     else:
         env = gym.make(env=args.env_name)
 
-    node = DataGenerator(env, max_episodes=args.nb_episodes, max_steps=args.steps)
+    node = DataGenerator(env, max_episodes=args.nb_episodes, max_steps=args.steps, log_file=args.logfile, downscale = args.downscale)
