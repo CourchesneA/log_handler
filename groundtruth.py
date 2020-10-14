@@ -39,7 +39,7 @@ class DataGenerator:
     def __init__(self, env, max_episodes, max_steps):
         self.env = env
         self.env.reset()
-        self.logger = Logger(self.env, log_file=f"ds_{max_steps}_{max_episodes}.log")
+        self.logger = Logger(self.env, log_file=f"/miniscratch/courchea/ds_{max_steps}_{max_episodes}.log")
         self.episode = 1
         self.max_episodes = max_episodes
 
@@ -196,9 +196,9 @@ if __name__ == "__main__":
         "--raw-log", default=False, help="enables recording high resolution raw log"
     )
     parser.add_argument(
-        "--steps", default=500, help="number of steps to record in one batch"
+        "--steps", default=1000, help="number of steps to record in one batch"
     )
-    parser.add_argument("--nb-episodes", default=100, type=int)
+    parser.add_argument("--nb-episodes", default=1200, type=int)
 
     args = parser.parse_args()
 

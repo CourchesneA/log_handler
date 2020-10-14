@@ -2,8 +2,8 @@
 #SBATCH --partition=main
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:0
-#SBATCH --mem=20G
-#SBATCH --time=10:00:00
+#SBATCH --mem=10G
+#SBATCH --time=20:00:00
 #SBATCH -o /network/tmp1/courchea/slurm-%j.out
 
 module load python/3.8
