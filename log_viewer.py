@@ -4,17 +4,24 @@ import tkinter as tk
 import pickle
 import signal
 import sys
+import os
 from typing import Dict, List
 from PIL import Image, ImageTk
 from log_schema import Episode, Step
+import tensorflow as tf
+import cv2
 
 EPISODE_LABEL = "Episode: {}/{}"
 FRAME_LABEL = "Frame: {}/{}"
 FPS_LABEL = "Speed: {} fps"
+ACTION_LABEL = "V: {}, Omega: {}"
 
-FILE_NAME = "slimtest.log"
-# FILE_NAME = "train-002.log"
-# FILE_NAME = "log2.log"
+DEFAULT_FRAMERATE = 1
+
+DATASET_DIR = "/home/anthony/Duckietown/Datasets"
+DS_FILE_NAME = "slimds.log"
+MODEL_DIR = "/home/anthony/Duckietown/Models"
+MODEL_FILE_NAME = "TNetLC"
 
 COUNT_EPISODES = True
 
@@ -75,12 +82,37 @@ class LogViewer:
         except AttributeError:
             pass
 
+    @property
+    def last_action(self):
+        return self._last_action
+
+    @last_action.setter
+    def last_action(self, value):
+        self._last_action = value
+        try:
+            self._action_label.set(ACTION_LABEL.format(value[0], value[1]))
+        except (AttributeError, TypeError):
+            pass
+
+    @property
+    def last_model_action(self):
+        return self._last_action
+
+    @last_model_action.setter
+    def last_model_action(self, value):
+        self._last_model_action = value
+        try:
+            self._action_model_label.set(ACTION_LABEL.format(value[0], value[1]))
+        except (AttributeError, TypeError):
+            pass
+
     def __init__(self):
         print("Start init")
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
         self.root = tk.Tk()
         self.init_vars()
+        self.load_model()
         self.next_episode()
 
         self.setup_widgets()
@@ -97,14 +129,18 @@ class LogViewer:
         self._episode_label = tk.StringVar()
         self._frame_label = tk.StringVar()
         self._fps_label = tk.StringVar()
+        self._action_label = tk.StringVar()
+        self._action_model_label = tk.StringVar()
         self.nb_episodes = -1
         self.nb_frames = 0
-        self.FPS = 45
+        self.FPS = DEFAULT_FRAMERATE
         self.data: Episode = None
         self.frame_index = 0
         self.episode_index = 0
         self.FP = None
         self.episode = None
+        self.last_action = None
+        self.last_model_action = None
 
     def setup_widgets(self):
         self.root.title("Log Handler")
@@ -128,7 +164,7 @@ class LogViewer:
         self.info_ep = tk.Label(self.info_frame, textvariable=self._episode_label)
         self.info_ep.grid(row=0, column=0, sticky=tk.W)
 
-        self.info_file = tk.Label(self.info_frame, text=f"File: '{FILE_NAME}'")
+        self.info_file = tk.Label(self.info_frame, text=f"File: '{DS_FILE_NAME}'")
         self.info_file.grid(row=0, column=1, sticky=tk.W)
 
         self.info_cf = tk.Label(self.info_frame, textvariable=self._frame_label)
@@ -138,34 +174,40 @@ class LogViewer:
         self.info_fps = tk.Label(self.info_frame, textvariable=self._fps_label)
         self.info_fps.grid(row=1, column=1, sticky=tk.W)
 
+        self.info_last_action = tk.Label(self.info_frame, textvariable=self._last_action)
+        self.info_fps.grid(row=2, column=0, sticky=tk.W)
+
+        self.info_last_model_action = tk.Label(self.info_frame, textvariable=self._last_model_action)
+        self.info_fps.grid(row=2, column=1, sticky=tk.W)
+
         self.info_speeddown = tk.Button(
             self.info_frame, text="slower", command=self.speeddown
         )
-        self.info_speeddown.grid(row=2, column=0)
+        self.info_speeddown.grid(row=3, column=0)
 
         self.info_speedup = tk.Button(
             self.info_frame, text="faster", command=self.speedup
         )
-        self.info_speedup.grid(row=2, column=1)
+        self.info_speedup.grid(row=3, column=1)
 
         self.info_button_prev = tk.Button(
             self.info_frame, text="<<", command=self.previous_episode
         )
-        self.info_button_prev.grid(row=3, column=0)
+        self.info_button_prev.grid(row=4, column=0)
 
         self.info_button_next = tk.Button(
             self.info_frame, text=">>", command=self.next_episode
         )
-        self.info_button_next.grid(row=3, column=1)
+        self.info_button_next.grid(row=4, column=1)
 
     def bind_keys(self):
         self.root.bind("<Return>", self.replay)
         self.root.protocol("WM_DELETE_WINDOW", lambda: self.shutdown(0))
         # self.root.bind('<Configure>', self.adjust_size)
 
-    def load_data(self, data_file: str = "training_data.log") -> List:
+    def load_data(self) -> List:
         if self.FP is None:
-            self.FP = open(FILE_NAME, "rb")
+            self.FP = open(os.path.join(DATASET_DIR, DS_FILE_NAME), "rb")
             self.nb_episodes = self.count_episodes()
             # self.current_episode = 0
 
@@ -196,15 +238,19 @@ class LogViewer:
     def update_image(self):
         try:
             # sample = self.data[self.frame]['step'][0]
-            sample = self.episode_data.steps[self.frame_index].obs
+            sample: Step = self.episode_data.steps[self.frame_index]
         except IndexError:
             print("outofbound")
             # self.next_episode()
             self.frame_index = 0
             self.root.after(int(1000), lambda: self.update_image())
             return
+
         self.frame_index += 1
-        img_array = Image.fromarray(sample)
+
+        img_array = Image.fromarray(sample.obs)
+        self.last_action = sample.action
+        self.last_model_action = self.get_model_prediction(sample.obs)
         # if not (self.width, self.height) == (200, 150):
         #     # img_array = img_array.resize((self.width, self.height))
         #     print(f"Actual size: {self.stream_panel.winfo_width()}")
@@ -289,6 +335,70 @@ class LogViewer:
 
     #     self.background_image = ImageTk.PhotoImage(self.image)
     #     self.background.configure(image =  self.background_image)
+
+    # -------------------- T E N S O R F L O W    S E C T I O N  ---------------------
+
+    def image_resize(self, image, width=None, height=None, inter=cv2.INTER_AREA):
+        # initialize the dimensions of the image to be resized and
+        # grab the image size
+        dim = None
+        (h, w) = image.shape[:2]
+
+        # if both the width and height are None, then return the
+        # original image
+        if width is None and height is None:
+            return image
+
+        # check to see if the width is None
+        if width is None:
+            # calculate the ratio of the height and construct the
+            # dimensions
+            r = height / float(h)
+            dim = (int(w * r), height)
+
+        # otherwise, the height is None
+        else:
+            # calculate the ratio of the width and construct the
+            # dimensions
+            r = width / float(w)
+            dim = (width, int(h * r))
+
+        # resize the image
+        resized = cv2.resize(image, dim, interpolation=inter)
+
+        # return the resized image
+        return resized
+
+    def load_model(self):
+        self.model = tf.keras.models.load_model(
+            os.path.join(MODEL_DIR, MODEL_FILE_NAME),
+            custom_objects={"rmse": self.rmse, "r_square": self.r_square},
+        )
+        print(f"Successfully loaded model {MODEL_FILE_NAME}")
+
+    def get_model_prediction(self, obs) -> List[float]:
+        return self.model.predict(obs)
+
+    def rmse(self, y_true, y_pred):
+        from keras import backend
+
+        return backend.sqrt(backend.mean(backend.square(y_pred - y_true), axis=-1))
+
+    # mean squared error (mse) for regression
+    def mse(self, y_true, y_pred):
+        from keras import backend
+
+        return backend.mean(backend.square(y_pred - y_true), axis=-1)
+
+    # coefficient of determination (R^2) for regression
+    def r_square(self, y_true, y_pred):
+        from keras import backend as K
+
+        SS_res = K.sum(K.square(y_true - y_pred))
+        SS_tot = K.sum(K.square(y_true - K.mean(y_true)))
+        return 1 - SS_res / (SS_tot + K.epsilon())
+
+    # --------------------------------------------------------------------------------
 
     def shutdown(self, signum, frame=None):
         print(f"Clean shutdown")
