@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
 
+import argparse
 import tkinter as tk
 import pickle
+import numpy as np
 import signal
 import sys
 import os
 from typing import Dict, List
 from PIL import Image, ImageTk
 from log_schema import Episode, Step
-import tensorflow as tf
+#import tensorflow as tf
 import cv2
 
 EPISODE_LABEL = "Episode: {}/{}"
 FRAME_LABEL = "Frame: {}/{}"
 FPS_LABEL = "Speed: {} fps"
-ACTION_LABEL = "V: {}, Omega: {}"
+ACTION_LABEL = "V: {:.2f}, w: {:.2f}"
 
-DEFAULT_FRAMERATE = 1
+DEFAULT_FRAMERATE = 30
 
 DATASET_DIR = "/home/anthony/Duckietown/Datasets"
-DS_FILE_NAME = "slimds.log"
+DS_FILE_NAME = "RJ_real_ds_1.log"
 MODEL_DIR = "/home/anthony/Duckietown/Models"
 MODEL_FILE_NAME = "TNetLC"
 
@@ -101,18 +103,22 @@ class LogViewer:
     @last_model_action.setter
     def last_model_action(self, value):
         self._last_model_action = value
+        print(f"INSEt: {value} of type {type(value)}")
         try:
             self._action_model_label.set(ACTION_LABEL.format(value[0], value[1]))
-        except (AttributeError, TypeError):
+            print(f"Updated setter model action to {ACTION_LABEL.format(value[0], value[1])}")
+        except (AttributeError, TypeError) as e:
+            print(e)
             pass
 
-    def __init__(self):
+    def __init__(self, input_file):
         print("Start init")
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
         self.root = tk.Tk()
+        self.input_file = os.path.join(DATASET_DIR, input_file)
         self.init_vars()
-        self.load_model()
+        #self.load_model()
         self.next_episode()
 
         self.setup_widgets()
@@ -130,7 +136,7 @@ class LogViewer:
         self._frame_label = tk.StringVar()
         self._fps_label = tk.StringVar()
         self._action_label = tk.StringVar()
-        self._action_model_label = tk.StringVar()
+        #self._action_model_label = tk.StringVar()
         self.nb_episodes = -1
         self.nb_frames = 0
         self.FPS = DEFAULT_FRAMERATE
@@ -140,7 +146,7 @@ class LogViewer:
         self.FP = None
         self.episode = None
         self.last_action = None
-        self.last_model_action = None
+        #self.last_model_action = None
 
     def setup_widgets(self):
         self.root.title("Log Handler")
@@ -164,7 +170,7 @@ class LogViewer:
         self.info_ep = tk.Label(self.info_frame, textvariable=self._episode_label)
         self.info_ep.grid(row=0, column=0, sticky=tk.W)
 
-        self.info_file = tk.Label(self.info_frame, text=f"File: '{DS_FILE_NAME}'")
+        self.info_file = tk.Label(self.info_frame, text=f"File: '{os.path.basename(self.input_file)}'")
         self.info_file.grid(row=0, column=1, sticky=tk.W)
 
         self.info_cf = tk.Label(self.info_frame, textvariable=self._frame_label)
@@ -174,11 +180,12 @@ class LogViewer:
         self.info_fps = tk.Label(self.info_frame, textvariable=self._fps_label)
         self.info_fps.grid(row=1, column=1, sticky=tk.W)
 
-        self.info_last_action = tk.Label(self.info_frame, textvariable=self._last_action)
-        self.info_fps.grid(row=2, column=0, sticky=tk.W)
+        self.info_last_action = tk.Label(self.info_frame, textvariable=self._action_label)
+        # self.info_last_action = tk.Label(self.info_frame, text="action text")
+        self.info_last_action.grid(row=2, column=0, sticky=tk.W)
 
-        self.info_last_model_action = tk.Label(self.info_frame, textvariable=self._last_model_action)
-        self.info_fps.grid(row=2, column=1, sticky=tk.W)
+        #self.info_last_model_action = tk.Label(self.info_frame, textvariable=self._action_model_label)
+        #self.info_last_model_action.grid(row=2, column=1, sticky=tk.W)
 
         self.info_speeddown = tk.Button(
             self.info_frame, text="slower", command=self.speeddown
@@ -207,7 +214,7 @@ class LogViewer:
 
     def load_data(self) -> List:
         if self.FP is None:
-            self.FP = open(os.path.join(DATASET_DIR, DS_FILE_NAME), "rb")
+            self.FP = open(self.input_file, "rb")
             self.nb_episodes = self.count_episodes()
             # self.current_episode = 0
 
@@ -219,7 +226,6 @@ class LogViewer:
             return
         self.nb_frames = len(self.episode_data.steps)
         print(f"Pickled new data with {self.nb_frames} frames")
-        # self.frame_index = 0
 
     def count_episodes(self):
         if not COUNT_EPISODES:
@@ -240,17 +246,20 @@ class LogViewer:
             # sample = self.data[self.frame]['step'][0]
             sample: Step = self.episode_data.steps[self.frame_index]
         except IndexError:
-            print("outofbound")
+            print("Reached last step of episode")
             # self.next_episode()
+            # We are going to loop until user press next
             self.frame_index = 0
             self.root.after(int(1000), lambda: self.update_image())
             return
 
         self.frame_index += 1
 
-        img_array = Image.fromarray(sample.obs)
+        displ = sample.obs
+        displ = cv2.cvtColor(displ, cv2.COLOR_YUV2BGR)
+        img_array = Image.fromarray(displ)
         self.last_action = sample.action
-        self.last_model_action = self.get_model_prediction(sample.obs)
+        #self.last_model_action = self.get_model_prediction(sample.obs)
         # if not (self.width, self.height) == (200, 150):
         #     # img_array = img_array.resize((self.width, self.height))
         #     print(f"Actual size: {self.stream_panel.winfo_width()}")
@@ -377,7 +386,9 @@ class LogViewer:
         print(f"Successfully loaded model {MODEL_FILE_NAME}")
 
     def get_model_prediction(self, obs) -> List[float]:
-        return self.model.predict(obs)
+        obs_expanded = np.expand_dims(obs, axis=0)
+        prediction = self.model.predict(obs_expanded)
+        return prediction
 
     def rmse(self, y_true, y_pred):
         from keras import backend
@@ -410,4 +421,9 @@ class LogViewer:
 
 
 if __name__ == "__main__":
-    LogViewer()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--input', dest="input_file", default=DS_FILE_NAME, type=str, help="input log file")
+    args = parser.parse_args()
+
+    LogViewer(args.input_file)
