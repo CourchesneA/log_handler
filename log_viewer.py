@@ -256,7 +256,7 @@ class LogViewer:
         self.frame_index += 1
 
         displ = sample.obs
-        displ = cv2.cvtColor(displ, cv2.COLOR_YUV2BGR)
+        displ = cv2.cvtColor(displ, cv2.COLOR_YUV2RGB)
         img_array = Image.fromarray(displ)
         self.last_action = sample.action
         #self.last_model_action = self.get_model_prediction(sample.obs)
